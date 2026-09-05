@@ -43,6 +43,7 @@ Documentation = "https://wrapture.readthedocs.io"
 [project.entry-points."wrapture.instrumentation"]
 pymysql = "wrapture_instrumentation_mysql.pymysql:PymysqlInstrumentation"
 MySQLdb = "wrapture_instrumentation_mysql.mysqldb:MySQLdbInstrumentation"
+aiomysql = "wrapture_instrumentation_mysql.aiomysql:AiomysqlInstrumentation"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -65,8 +66,10 @@ version = {attr = "wrapture_instrumentation_mysql.__version__"}
 # pure Python and installs everywhere; its `rsa` extra pulls in the
 # cryptography package that the 1.1.x lines need to authenticate
 # against a MySQL 8 server's caching_sha2_password over a plain
-# socket (1.2 negotiates TLS by default and needs nothing).
+# socket (1.2 negotiates TLS by default and needs nothing). aiomysql
+# is pure Python too, over PyMySQL's packet classes.
 test = [
+    "aiomysql",
     "pymysql[rsa]",
     "pytest",
     "sqlalchemy",
@@ -103,7 +106,7 @@ files = ["src/wrapture_instrumentation_mysql", "tests", "demo"]
 # MySQLdb name is also what the pymysql suite imports once PyMySQL has
 # installed itself under it.
 [[tool.mypy.overrides]]
-module = ["pymysql", "pymysql.*", "MySQLdb", "MySQLdb.*"]
+module = ["pymysql", "pymysql.*", "MySQLdb", "MySQLdb.*", "aiomysql", "aiomysql.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -128,3 +131,4 @@ known-first-party = ["wrapture_instrumentation_mysql"]
 [tool.ruff.lint.per-file-ignores]
 "tests/pymysql/*" = ["E402"]
 "tests/mysqldb/*" = ["E402"]
+"tests/aiomysql/*" = ["E402"]

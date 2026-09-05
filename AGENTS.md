@@ -3,8 +3,8 @@
 ## Project
 
 wrapture-instrumentation-mysql is packaged instrumentation for the
-MySQL client libraries (PyMySQL and mysqlclient, imported as
-`MySQLdb`, now; aiomysql to follow), applied through wrapture. A
+MySQL client libraries (PyMySQL, mysqlclient, imported as `MySQLdb`,
+and aiomysql), applied through wrapture. A
 database driver is the kind of target the separate-package rule was
 drawn for: the core wrapture-instrumentation package covers only
 targets testable in-process with no separate backend, and this
@@ -148,10 +148,11 @@ see everything.
   on every supported version. `just test-python 3.13` runs natively
   instead, without the MySQLdb suite.
 
-- `just test-pymysql 1.1.1` runs the pymysql suite against one
-  PyMySQL line, natively; `just test-mysqldb 2.2.1` runs the MySQLdb
-  suite against one mysqlclient line, inside docker; the `-all`
-  forms loop over the lists.
+- `just test-pymysql 1.1.1` and `just test-aiomysql 0.2.0` run the
+  pymysql and aiomysql suites against one line of their driver,
+  natively; `just test-mysqldb 2.2.1` runs the MySQLdb suite against
+  one mysqlclient line, inside docker; the `-all` forms loop over the
+  lists.
 
 - `just mysql-start` runs the compose file's server alone, published
   on localhost, and prints the URL to export for the demos or for

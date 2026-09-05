@@ -16,12 +16,14 @@ The directory has two levels:
   cleanly.
 
 - One subdirectory per target, `tests/<target>/` (`tests/pymysql/`,
-  `tests/mysqldb/`), holding that instrumentation's suite: settings validation, applying
-  and removing the class directly, the whole path through
+  `tests/mysqldb/`, `tests/aiomysql/`), holding that
+  instrumentation's suite: settings validation, applying and
+  removing the class directly, the whole path through
   `wrapture.instrumentation()` with a timeline recording what the
-  bindings observe, resolving the entry point by name, a check that
-  the installed driver satisfies the class's `supports` range, and
-  the composition tests with the core package's sqlalchemy target.
+  bindings observe (the aiomysql suite running each case as a
+  coroutine), resolving the entry point by name, a check that the
+  installed driver satisfies the class's `supports` range, and the
+  composition tests with the core package's sqlalchemy target.
 
 Shared helpers and the server fixture live in
 [tests/conftest.py](tests/conftest.py).
@@ -174,6 +176,7 @@ live stream and the reconstructed tree with timings:
 just mysql-start
 export WRAPTURE_MYSQL_URL=mysql://root:mysql@127.0.0.1:33069/wrapture
 just demo-pymysql
+just demo-aiomysql
 ```
 
 With --otel the same events also export as OpenTelemetry spans over
@@ -236,13 +239,15 @@ just test-python 3.13
 The dependency groups install each driver at whatever version the
 lock resolves. The instrumentation's `supports` range is kept honest
 by running its suite against other lines of the driver. Each line
-has a place in `pymysql_versions` or `mysqlclient_versions` in the
-Justfile, run one at a time by `just test-pymysql 1.1.1` or
-`just test-mysqldb 2.2.1`, or all by the `-all` forms, and the CI
-workflow runs the same matrix. The PyMySQL rows run natively in an
-environment of their own on Python 3.12 with the driver overlaid at
-the requested version (`pymysql[rsa]`, so the `cryptography` package
-the 1.1 lines need for the server's authentication comes along); the
+has a place in `pymysql_versions`, `mysqlclient_versions` or
+`aiomysql_versions` in the Justfile, run one at a time by
+`just test-pymysql 1.1.1`, `just test-mysqldb 2.2.1` or
+`just test-aiomysql 0.2.0`, or all by the `-all` forms, and the CI
+workflow runs the same matrix. The PyMySQL and aiomysql rows run
+natively in an environment of their own on Python 3.12 with the
+driver overlaid at the requested version (`pymysql[rsa]`, so the
+`cryptography` package the 1.1 lines need for the server's
+authentication comes along); the
 mysqlclient rows run inside the docker container on 3.12, overlaying
 the driver at the requested version there, since every line of it
 builds from source. A test in each suite asserts the installed driver

@@ -86,6 +86,7 @@ $ python -m wrapture.tools instrumentation --verbose
 | ------ | ------------------ | ------- | -------- |
 | [`pymysql`](https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql/blob/develop/src/wrapture_instrumentation_mysql/pymysql/README.md) | PyMySQL 1.1.1+ (1.x) | Every query as one `database` leaf, however it was issued (a cursor's `execute`, `executemany` or `callproc`, through whichever cursor class the application chose), plus the connection being opened and each transaction boundary the connection performs itself (`begin`, `commit`, `rollback`). Each event carries the system, the operation, and the database, host and port it reached; a failing statement records the driver's exception. The SQL text (the template with its placeholders) is recorded only with the `statement` setting on, bound parameters never. | `statement` |
 | [`MySQLdb`](https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql/blob/develop/src/wrapture_instrumentation_mysql/mysqldb/README.md) | mysqlclient 2.2.1+ (2.x), imported as `MySQLdb` | The same shapes through mysqlclient: every query as one `database` leaf (`execute`, `executemany`, `callproc`, through every cursor class), the connection being opened, and `begin`, `commit` and `rollback`, the last two bound over the C core's own methods. Each event carries the system, the operation, and the host and port it reached, plus the database from mysqlclient 2.2.7 on (earlier versions do not keep it); a failing statement records the driver's exception. The SQL text (the template with its placeholders) is recorded only with the `statement` setting on, bound parameters never. | `statement` |
+| [`aiomysql`](https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql/blob/develop/src/wrapture_instrumentation_mysql/aiomysql/README.md) | aiomysql 0.2+ (0.x) | The same shapes through aiomysql, each event recorded around its await: every query as one `database` leaf (`execute`, `executemany`, `callproc`, through every cursor class), the connection being opened (from a pool too), and `begin`, `commit` and `rollback`. Each event carries the system, the operation, and the database, host and port it reached; a failing statement records the driver's exception. The SQL text (the template with its placeholders) is recorded only with the `statement` setting on, bound parameters never. | `statement` |
 
 The entry point name is the config's `name`, and is the import name
 of the package the instrumentation patches (so mysqlclient's is
@@ -110,6 +111,10 @@ By design, and where it goes:
 - Mode changes and housekeeping (`autocommit()`, `select_db()`,
   `ping()`, `set_character_set()`, `show_warnings()`): not database
   operations in the sense the events record.
+
+- Pool bookkeeping (aiomysql): taking a connection from a pool and
+  returning it are not database operations; the connections the pool
+  opens do record.
 
 - `LOAD DATA LOCAL INFILE` records as a statement like any other; the
   file's contents never do.

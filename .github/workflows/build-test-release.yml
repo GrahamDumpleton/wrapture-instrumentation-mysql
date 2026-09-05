@@ -99,6 +99,10 @@ jobs:
             suite: mysqldb
             overlay: "mysqlclient"
             version: "2.2.7"
+          - target: aiomysql
+            suite: aiomysql
+            overlay: "aiomysql"
+            version: "0.2.0"
     services:
       mysql:
         image: mysql:8.4

@@ -13,6 +13,7 @@ python_versions := "3.12 3.13 3.14 3.15"
 # `test` runs, so it is not repeated here.
 pymysql_versions := "1.1.1 1.1.3"
 mysqlclient_versions := "2.2.1 2.2.7"
+aiomysql_versions := "0.2.0"
 
 # Where the compose file publishes the server for mysql-start.
 mysql_port := "33069"
@@ -108,6 +109,22 @@ test-mysqldb-all *ARGS:
         just test-mysqldb "${version}" {{ARGS}}
     done
 
+# The aiomysql suite against one aiomysql version, natively on Python
+# 3.12 as the pymysql rows are (pure Python, any interpreter would
+# do). The lock's own version is covered by the plain `test` runs.
+# Run the aiomysql suite against one aiomysql version, e.g. `just test-aiomysql 0.2.0`.
+test-aiomysql VERSION *ARGS:
+    UV_PROJECT_ENVIRONMENT=.venv-3.12 uv run --python 3.12 --no-default-groups --group test --with "aiomysql=={{VERSION}}" pytest tests/aiomysql {{ARGS}}
+
+# Run the aiomysql suite against every version in aiomysql_versions.
+test-aiomysql-all *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for version in {{aiomysql_versions}}; do
+        echo "=== aiomysql ${version} ==="
+        just test-aiomysql "${version}" {{ARGS}}
+    done
+
 # Published on localhost; prints the URL to export for the demos or
 # for running the tests natively against it rather than a throwaway
 # container per session. The server takes about ten seconds to come
@@ -156,6 +173,12 @@ demo-pymysql *ARGS:
 # Drive MySQLdb against the compose file's server, inside docker, with the instrumentation applied.
 demo-mysqldb *ARGS:
     WRAPTURE_WITH="wrapture[otel]" docker compose run --rm --build tests python -m demo.mysqldb {{ARGS}}
+
+# The same shapes through aiomysql, each awaited, plus a query on a
+# pooled connection; `--otel` as for demo-pymysql.
+# Drive aiomysql against the server WRAPTURE_MYSQL_URL names with the instrumentation applied.
+demo-aiomysql *ARGS:
+    uv run --with "wrapture[otel]" python -m demo.aiomysql {{ARGS}}
 
 # The package depends on a released wrapture. This overlays a checkout
 # of wrapture from the sibling directory as an editable install for the
