@@ -85,11 +85,13 @@ $ python -m wrapture.tools instrumentation --verbose
 | Target | Supported versions | Records | Settings |
 | ------ | ------------------ | ------- | -------- |
 | [`pymysql`](https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql/blob/develop/src/wrapture_instrumentation_mysql/pymysql/README.md) | PyMySQL 1.1.1+ (1.x) | Every query as one `database` leaf, however it was issued (a cursor's `execute`, `executemany` or `callproc`, through whichever cursor class the application chose), plus the connection being opened and each transaction boundary the connection performs itself (`begin`, `commit`, `rollback`). Each event carries the system, the operation, and the database, host and port it reached; a failing statement records the driver's exception. The SQL text (the template with its placeholders) is recorded only with the `statement` setting on, bound parameters never. | `statement` |
+| [`MySQLdb`](https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql/blob/develop/src/wrapture_instrumentation_mysql/mysqldb/README.md) | mysqlclient 2.2.1+ (2.x), imported as `MySQLdb` | The same shapes through mysqlclient: every query as one `database` leaf (`execute`, `executemany`, `callproc`, through every cursor class), the connection being opened, and `begin`, `commit` and `rollback`, the last two bound over the C core's own methods. Each event carries the system, the operation, and the host and port it reached, plus the database from mysqlclient 2.2.7 on (earlier versions do not keep it); a failing statement records the driver's exception. The SQL text (the template with its placeholders) is recorded only with the `statement` setting on, bound parameters never. | `statement` |
 
 The entry point name is the config's `name`, and is the import name
-of the package the instrumentation patches; the linked per-target
-README is the full user documentation: what records, what the events
-carry, the setting, and what is deliberately not traced.
+of the package the instrumentation patches (so mysqlclient's is
+`MySQLdb`); the linked per-target README is the full user
+documentation: what records, what the events carry, the setting, and
+what is deliberately not traced.
 
 ## What is not traced
 
@@ -119,7 +121,11 @@ The test suite drives the real drivers against a real MySQL server.
 (`mysql://user:password@host:port/database`); without it the suite
 runs a throwaway `mysql:8.4` container itself, which needs Docker
 Desktop or another docker daemon. With neither it fails rather than
-skips. [TESTING.md](TESTING.md) covers the details, including how
+skips. The mysqlclient driver builds from source against a MySQL
+client library, so its suite runs inside a docker container that
+carries the toolchain (`just test-docker`), and a plain native run
+skips that one suite visibly rather than asking for a client library
+on the machine. [TESTING.md](TESTING.md) covers the details, including how
 the suite copes with MySQL 8's `caching_sha2_password` authentication
 (the readiness probe's first connection warms the server's credential
 cache, after which every driver connects plainly; a real application

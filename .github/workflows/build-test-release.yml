@@ -21,7 +21,9 @@ jobs:
   # the URL from the environment and starts nothing itself. The health
   # check connects over TCP on purpose: the image's entrypoint first
   # runs a temporary server on the unix socket alone, which a socket
-  # ping would answer for before the real server exists.
+  # ping would answer for before the real server exists. The
+  # mysqlclient group builds the driver from source against the
+  # runner image's own MySQL client development package.
   test:
     name: Test (${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -61,14 +63,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run --no-default-groups --group test pytest
+        run: uv run --no-default-groups --group test --group mysqlclient pytest
 
   # Each target's suite against the other supported lines of its
   # driver, overlaid on the project environment as the Justfile's
   # per-target recipes do, on Python 3.12 (PyMySQL is pure Python, so
-  # any interpreter would do; 3.12 keeps the rows uniform). The lock's
-  # own version is covered by the test job above. Keep this list in
-  # step with the Justfile.
+  # any interpreter would do, and every mysqlclient line builds from
+  # source; 3.12 keeps the rows uniform). The overlay alone supplies
+  # the driver, so the mysqlclient group is not installed here. The
+  # lock's own version is covered by the test job above. Keep this
+  # list in step with the Justfile.
   test-targets:
     name: Test ${{ matrix.target }} ${{ matrix.version }}
     runs-on: ubuntu-latest
@@ -84,6 +88,14 @@ jobs:
             suite: pymysql
             overlay: "pymysql[rsa]"
             version: "1.1.3"
+          - target: MySQLdb
+            suite: mysqldb
+            overlay: "mysqlclient"
+            version: "2.2.1"
+          - target: MySQLdb
+            suite: mysqldb
+            overlay: "mysqlclient"
+            version: "2.2.7"
     services:
       mysql:
         image: mysql:8.4

@@ -13,7 +13,7 @@ authors = [
     {name = "Graham Dumpleton", email = "Graham.Dumpleton@gmail.com"}
 ]
 requires-python = ">=3.12"
-keywords = ["wrapture", "instrumentation", "mysql", "pymysql", "mysqlclient", "aiomysql", "tracing"]
+keywords = ["wrapture", "instrumentation", "mysql", "pymysql", "mysqlclient", "MySQLdb", "aiomysql", "tracing"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python :: 3",
@@ -42,6 +42,7 @@ Documentation = "https://wrapture.readthedocs.io"
 # the quoted header.
 [project.entry-points."wrapture.instrumentation"]
 pymysql = "wrapture_instrumentation_mysql.pymysql:PymysqlInstrumentation"
+MySQLdb = "wrapture_instrumentation_mysql.mysqldb:MySQLdbInstrumentation"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -70,6 +71,17 @@ test = [
     "pytest",
     "sqlalchemy",
     "wrapture-instrumentation",
+]
+# mysqlclient ships wheels for Windows only; everywhere else it builds
+# from source against a MySQL or MariaDB client library, needing
+# pkg-config, the client development package and a C compiler. It sits
+# in a group of its own so that a plain sync on a machine without
+# those still installs everything else and the pure Python targets can
+# be worked on; the docker test image and CI supply the toolchain and
+# install this group as well, and the MySQLdb suite skips itself
+# visibly where the driver is absent.
+mysqlclient = [
+    "mysqlclient",
 ]
 dev = [
     {include-group = "test"},
@@ -115,3 +127,4 @@ known-first-party = ["wrapture_instrumentation_mysql"]
 # module-level imports legitimately follow that statement.
 [tool.ruff.lint.per-file-ignores]
 "tests/pymysql/*" = ["E402"]
+"tests/mysqldb/*" = ["E402"]

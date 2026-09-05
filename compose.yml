@@ -4,9 +4,20 @@
 #
 #   just test-docker 3.15         one version, extra args to pytest
 #   just test-docker-all          every supported version
+#   just test-mysqldb 2.2.1       the MySQLdb suite against one
+#                                 mysqlclient line, built in here
+#   just demo-mysqldb             the MySQLdb demo, run in here
 #   just mysql-start              the server alone, published on
 #                                 localhost:33069 for the demos and
 #                                 for running the tests natively
+#
+# The tests container installs the test group and the mysqlclient
+# group (the driver builds once per version into its volume), runs
+# whatever command it is given through uv (pytest by default), and
+# overlays one extra requirement when WRAPTURE_WITH names it: a
+# driver at another version for the version rows, or wrapture[otel]
+# for the demo. The container reaches an OTLP endpoint on the host
+# through host.docker.internal.
 #
 # The tests container gets the server's URL in the environment, so the
 # suite's server fixture uses it and starts nothing itself, exactly as
@@ -42,10 +53,14 @@ services:
         condition: service_healthy
     environment:
       WRAPTURE_MYSQL_URL: mysql://root:mysql@mysql:3306/wrapture
+      WRAPTURE_WITH: ${WRAPTURE_WITH:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
       UV_PYTHON: ${UV_PYTHON:-3.14}
       UV_CACHE_DIR: /cache/uv
       UV_PYTHON_INSTALL_DIR: /cache/python
       UV_LINK_MODE: copy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/work
       - uv-cache:/cache
@@ -55,8 +70,12 @@ services:
       - -c
       - |
         export UV_PROJECT_ENVIRONMENT="/venv/$$UV_PYTHON"
-        exec uv run --python "$$UV_PYTHON" --no-default-groups --group test pytest "$$@"
+        if [ -n "$$WRAPTURE_WITH" ]; then
+            set -- --with "$$WRAPTURE_WITH" "$$@"
+        fi
+        exec uv run --python "$$UV_PYTHON" --no-default-groups --group test --group mysqlclient "$$@"
       - tests
+    command: ["pytest"]
 
 volumes:
   uv-cache:

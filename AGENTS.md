@@ -3,8 +3,8 @@
 ## Project
 
 wrapture-instrumentation-mysql is packaged instrumentation for the
-MySQL client libraries (PyMySQL now; mysqlclient, imported as
-`MySQLdb`, and aiomysql to follow), applied through wrapture. A
+MySQL client libraries (PyMySQL and mysqlclient, imported as
+`MySQLdb`, now; aiomysql to follow), applied through wrapture. A
 database driver is the kind of target the separate-package rule was
 drawn for: the core wrapture-instrumentation package covers only
 targets testable in-process with no separate backend, and this
@@ -42,17 +42,20 @@ documentation that will be committed.
 
 - No target is ever a dependency in pyproject.toml. The only runtime
   dependency is wrapture. The drivers go in the `test` dependency
-  group; their suites `importorskip` the driver so a build without it
-  skips rather than errors. Never depend on the packages being
-  instrumented.
+  group, except mysqlclient, which builds from source against a MySQL
+  client library and so has a dependency group of its own
+  (`mysqlclient`) that only the docker test container and CI install;
+  every suite `importorskip`s its driver so an environment without it
+  skips that suite rather than errors. Never depend on the packages
+  being instrumented.
 
 - Targets use bare subpackage directories (`pymysql/`), not the core
   package's `<category>/<target>` role directories: every target here
   is a database driver, so a category segment would say nothing.
   Entry point names are always the import name of the package the
-  hooks live under (`pymysql`; mysqlclient's will be `MySQLdb`, the
-  name it is imported and configured by, not the name it is
-  installed by), with the subpackage directory lowercased.
+  hooks live under (`pymysql`; mysqlclient's is `MySQLdb`, the name
+  it is imported and configured by, not the name it is installed
+  by), with the subpackage directory lowercased (`mysqldb/`).
 
 - Every event carries the database contract keys from common.py:
   `system` ("mysql"), `operation`, and the `database`, `host` and
@@ -140,12 +143,15 @@ see everything.
 - `just test-target pymysql` runs one target's suite.
 
 - `just test-docker 3.15` runs the suite inside docker on one
-  nominated Python version, against the compose file's own server;
-  `just test-all` runs it that way on every supported version.
-  `just test-python 3.13` runs natively instead.
+  nominated Python version, against the compose file's own server
+  and with every driver installed; `just test-all` runs it that way
+  on every supported version. `just test-python 3.13` runs natively
+  instead, without the MySQLdb suite.
 
 - `just test-pymysql 1.1.1` runs the pymysql suite against one
-  PyMySQL line; the `-all` form loops over the list.
+  PyMySQL line, natively; `just test-mysqldb 2.2.1` runs the MySQLdb
+  suite against one mysqlclient line, inside docker; the `-all`
+  forms loop over the lists.
 
 - `just mysql-start` runs the compose file's server alone, published
   on localhost, and prints the URL to export for the demos or for

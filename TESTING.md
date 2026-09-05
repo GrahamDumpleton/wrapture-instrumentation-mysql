@@ -15,8 +15,8 @@ The directory has two levels:
   imports a target, and the listing tool reporting every entry
   cleanly.
 
-- One subdirectory per target, `tests/<target>/` (`tests/pymysql/`),
-  holding that instrumentation's suite: settings validation, applying
+- One subdirectory per target, `tests/<target>/` (`tests/pymysql/`,
+  `tests/mysqldb/`), holding that instrumentation's suite: settings validation, applying
   and removing the class directly, the whole path through
   `wrapture.instrumentation()` with a timeline recording what the
   bindings observe, resolving the entry point by name, a check that
@@ -77,8 +77,10 @@ All tooling in this project goes through
 [uv](https://docs.astral.sh/uv/), which manages the project
 environment and installs the package, its development dependencies
 (including pytest) and the drivers the tests need. Nothing MySQL is
-installed on the machine: the server runs in docker, and PyMySQL is
-pure Python.
+installed on the machine: the server runs in docker, PyMySQL is pure
+Python, and mysqlclient, which builds from source against a MySQL
+client library, is built only inside the docker test container and on
+CI (see below).
 
 The simplest way to run the test suite is via the Justfile target,
 which runs natively on the default Python version and starts a
@@ -87,6 +89,13 @@ throwaway server unless `WRAPTURE_MYSQL_URL` is set:
 ```console
 just test
 ```
+
+This runs every suite but the MySQLdb one, which skips itself
+(visibly, in pytest's summary) because its driver is not in the
+native environment; `just test-docker` below runs it. Should you
+have a MySQL client library and pkg-config on the machine anyway,
+`uv sync --group mysqlclient` builds the driver into the native
+environment and the suite then runs natively too.
 
 Extra arguments are passed through to pytest, for example:
 
@@ -174,6 +183,16 @@ wrapture[otel] dependencies for the run:
 just demo-pymysql --otel
 ```
 
+The MySQLdb demo runs inside the docker test container, where its
+driver is built, against the compose file's own server (which it
+starts if need be); with --otel it exports to the host's
+localhost:4318 through host.docker.internal:
+
+```console
+just demo-mysqldb
+just demo-mysqldb --otel
+```
+
 ## Testing across Python versions
 
 The project supports Python 3.12 through 3.15. Free threaded builds
@@ -190,9 +209,10 @@ needs to build from source (it ships no Linux or macOS wheels), so
 the machine never needs a MySQL client library. The
 [compose.yml](compose.yml) file defines the server and a `tests`
 container built from that image; uv fetches the requested interpreter
-inside the container and installs the test dependencies into a
-per-version environment, both kept on named volumes so reruns pay for
-neither.
+inside the container and installs the `test` and `mysqlclient`
+dependency groups into a per-version environment, both kept on named
+volumes so reruns pay for neither (the driver builds once per
+version, on the first run).
 
 ```console
 just test-all
@@ -201,7 +221,8 @@ just test-docker 3.15
 
 The first run per version downloads the interpreter and the wheels.
 The suite can also run natively in a per-version environment
-(.venv-VERSION) that leaves the default .venv untouched:
+(.venv-VERSION) that leaves the default .venv untouched, without the
+MySQLdb suite:
 
 ```console
 just test-python 3.13
@@ -209,25 +230,30 @@ just test-python 3.13
 
 ## Testing across driver versions
 
-The `test` dependency group installs each driver at whatever version
-the lock resolves. The instrumentation's `supports` range is kept
-honest by running its suite against other lines of the driver. Each
-line has a place in `pymysql_versions` in the Justfile, run one at a
-time by `just test-pymysql 1.1.1` or all by `just test-pymysql-all`,
-and the CI workflow runs the same matrix. These runs use an
+The dependency groups install each driver at whatever version the
+lock resolves. The instrumentation's `supports` range is kept honest
+by running its suite against other lines of the driver. Each line
+has a place in `pymysql_versions` or `mysqlclient_versions` in the
+Justfile, run one at a time by `just test-pymysql 1.1.1` or
+`just test-mysqldb 2.2.1`, or all by the `-all` forms, and the CI
+workflow runs the same matrix. The PyMySQL rows run natively in an
 environment of their own on Python 3.12 with the driver overlaid at
 the requested version (`pymysql[rsa]`, so the `cryptography` package
-the 1.1 lines need for the server's authentication comes along). A
-test in the suite asserts the installed driver satisfies `supports`,
-so a matrix entry outside the range fails loudly rather than passing
-vacuously.
+the 1.1 lines need for the server's authentication comes along); the
+mysqlclient rows run inside the docker container on 3.12, overlaying
+the driver at the requested version there, since every line of it
+builds from source. A test in each suite asserts the installed driver
+satisfies `supports`, so a matrix entry outside the range fails
+loudly rather than passing vacuously.
 
 ## Continuous integration
 
 The workflow runs every test job on Linux with a MySQL service
 container (service containers are Linux-only, and the drivers do not
 differ per OS at the instrumented layer), the URL in the environment,
-across Python 3.12 to 3.15 and the driver version matrix.
+across Python 3.12 to 3.15 and the driver version matrix. The runner
+image carries a MySQL client development package, so the
+`mysqlclient` group builds there without an install step.
 
 ## Testing against unreleased wrapture
 
@@ -252,8 +278,9 @@ which overlays that checkout as an editable install for the run.
   manipulation is needed.
 
 - Guard the driver imports with `pytest.importorskip` at the top of
-  the module (`pytest.importorskip("pymysql")`), so a build without
-  that driver skips the suite rather than erroring.
+  the module (`pytest.importorskip("pymysql")`), so an environment
+  without that driver skips the suite rather than erroring; the
+  native environment is one such for the MySQLdb suite.
 
 - Take the `mysql` fixture for the server and create temporary tables
   for whatever the test needs; never leave ordinary tables or

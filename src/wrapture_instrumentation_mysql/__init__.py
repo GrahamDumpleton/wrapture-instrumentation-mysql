@@ -2,8 +2,8 @@
 Instrumentation for the MySQL client libraries, applied through
 wrapture.
 
-Each target lives in its own subpackage here (pymysql now, MySQLdb
-and aiomysql later), holding one wrapture.Instrumentation subclass
+Each target lives in its own subpackage here (pymysql and mysqldb
+now, aiomysql later), holding one wrapture.Instrumentation subclass
 registered in the wrapture.instrumentation entry point group under
 the bare target name. This module carries only the version: importing
 it loads no instrumentation and no target.
