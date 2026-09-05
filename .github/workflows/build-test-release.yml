@@ -51,8 +51,11 @@ jobs:
           --health-retries 20
         ports:
           - 3306:3306
+    # 127.0.0.1 rather than localhost: to the MySQL client library
+    # (and so to mysqlclient) localhost means the unix socket, which
+    # the service container does not publish.
     env:
-      WRAPTURE_MYSQL_URL: mysql://root:mysql@localhost:3306/wrapture
+      WRAPTURE_MYSQL_URL: mysql://root:mysql@127.0.0.1:3306/wrapture
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -109,8 +112,11 @@ jobs:
           --health-retries 20
         ports:
           - 3306:3306
+    # 127.0.0.1 rather than localhost: to the MySQL client library
+    # (and so to mysqlclient) localhost means the unix socket, which
+    # the service container does not publish.
     env:
-      WRAPTURE_MYSQL_URL: mysql://root:mysql@localhost:3306/wrapture
+      WRAPTURE_MYSQL_URL: mysql://root:mysql@127.0.0.1:3306/wrapture
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

@@ -36,7 +36,10 @@ one of two ways:
   running (`mysql://user:password@host:port/database`), and the
   fixture uses it and starts nothing. This is how CI's service
   container, the compose file's `mysql` service and a server of your
-  own are used.
+  own are used. Name the host as `127.0.0.1` rather than `localhost`:
+  to the MySQL client library, and so to mysqlclient, `localhost`
+  means the unix socket, and a server in a container publishes only
+  its TCP port (PyMySQL always uses TCP and does not care).
 
 - Otherwise the fixture runs a throwaway container from the official
   `mysql:8.4` image on a random localhost port, waits until a real
@@ -123,7 +126,7 @@ prints:
 
 ```console
 just mysql-start
-export WRAPTURE_MYSQL_URL=mysql://root:mysql@localhost:33069/wrapture
+export WRAPTURE_MYSQL_URL=mysql://root:mysql@127.0.0.1:33069/wrapture
 just test
 just mysql-stop
 ```
@@ -169,7 +172,7 @@ live stream and the reconstructed tree with timings:
 
 ```console
 just mysql-start
-export WRAPTURE_MYSQL_URL=mysql://root:mysql@localhost:33069/wrapture
+export WRAPTURE_MYSQL_URL=mysql://root:mysql@127.0.0.1:33069/wrapture
 just demo-pymysql
 ```
 

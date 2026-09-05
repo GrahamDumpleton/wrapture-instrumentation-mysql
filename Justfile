@@ -111,11 +111,13 @@ test-mysqldb-all *ARGS:
 # Published on localhost; prints the URL to export for the demos or
 # for running the tests natively against it rather than a throwaway
 # container per session. The server takes about ten seconds to come
-# up; --wait returns once its health check passes.
+# up; --wait returns once its health check passes. The URL says
+# 127.0.0.1 rather than localhost, which to the MySQL client library
+# (and so to mysqlclient) means the unix socket.
 # Start the compose file's MySQL server alone.
 mysql-start:
     WRAPTURE_MYSQL_PORT={{mysql_port}} docker compose up -d --wait mysql
-    @echo "export WRAPTURE_MYSQL_URL=mysql://root:mysql@localhost:{{mysql_port}}/wrapture"
+    @echo "export WRAPTURE_MYSQL_URL=mysql://root:mysql@127.0.0.1:{{mysql_port}}/wrapture"
 
 # Stop the compose file's MySQL server (and the tests container).
 mysql-stop:
