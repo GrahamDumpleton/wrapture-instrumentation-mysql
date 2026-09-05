@@ -1,0 +1,117 @@
+[build-system]
+requires = ["setuptools>=62.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wrapture-instrumentation-mysql"
+dynamic = ["version"]
+description = "Instrumentation for the MySQL client libraries (PyMySQL, mysqlclient, aiomysql), applied through wrapture."
+readme = "README.md"
+license = "BSD-2-Clause"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Graham Dumpleton", email = "Graham.Dumpleton@gmail.com"}
+]
+requires-python = ">=3.12"
+keywords = ["wrapture", "instrumentation", "mysql", "pymysql", "mysqlclient", "aiomysql", "tracing"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+# wrapture is the only dependency, ever. An instrumentation package
+# never depends on the packages it instruments: installing it must not
+# install pymysql, and whether a driver is present and at a supported
+# version is checked by wrapture at apply time from the class data.
+dependencies = [
+    "wrapture>=1.0.0a21",
+]
+
+[project.urls]
+Homepage = "https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql"
+Documentation = "https://wrapture.readthedocs.io"
+"Bug Tracker" = "https://github.com/GrahamDumpleton/wrapture-instrumentation-mysql/issues/"
+
+# One entry per target, the entry point name being the bare target
+# name the config's [[instrument]] entry uses: the import name of the
+# package the hooks live under. The group name has a dot in it, hence
+# the quoted header.
+[project.entry-points."wrapture.instrumentation"]
+pymysql = "wrapture_instrumentation_mysql.pymysql:PymysqlInstrumentation"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.setuptools.package-data]
+wrapture_instrumentation_mysql = ["py.typed", "*/README.md"]
+
+[tool.setuptools.dynamic]
+version = {attr = "wrapture_instrumentation_mysql.__version__"}
+
+[dependency-groups]
+# The test group carries the drivers at whatever version the lock
+# resolves, and the core wrapture instrumentation package for the
+# sqlalchemy target the composition tests compose against. PyMySQL is
+# pure Python and installs everywhere; its `rsa` extra pulls in the
+# cryptography package that the 1.1.x lines need to authenticate
+# against a MySQL 8 server's caching_sha2_password over a plain
+# socket (1.2 negotiates TLS by default and needs nothing).
+test = [
+    "pymysql[rsa]",
+    "pytest",
+    "sqlalchemy",
+    "wrapture-instrumentation",
+]
+dev = [
+    {include-group = "test"},
+    "mypy",
+    "ruff",
+    "setuptools",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/wrapture_instrumentation_mysql", "tests", "demo"]
+
+# The drivers ship no type information; their objects cross this
+# package through Any-typed hook modules and test helpers anyway. The
+# MySQLdb name is also what the pymysql suite imports once PyMySQL has
+# installed itself under it.
+[[tool.mypy.overrides]]
+module = ["pymysql", "pymysql.*", "MySQLdb", "MySQLdb.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["wrapture_instrumentation_mysql"]
+
+# The target suites guard their imports behind importorskip, so their
+# module-level imports legitimately follow that statement.
+[tool.ruff.lint.per-file-ignores]
+"tests/pymysql/*" = ["E402"]

@@ -1,0 +1,8 @@
+# setuptools includes test_*.py files by default but not the helpers
+# they import (conftest.py, the package __init__.py), so the tests
+# directory is taken whole, with the repository's other notes and the
+# docker files the test matrix runs under.
+graft tests
+graft demo
+include CHANGES.md TESTING.md compose.yml Dockerfile
+global-exclude __pycache__ *.py[cod]

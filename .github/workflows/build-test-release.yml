@@ -1,0 +1,285 @@
+name: Build, test and create release packages.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+a[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+b[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+.dev[0-9]+"
+
+jobs:
+  # Every test job runs on Linux with a MySQL service container:
+  # service containers are Linux-only, and the drivers do not differ
+  # per OS at the instrumented layer. The suite's server fixture reads
+  # the URL from the environment and starts nothing itself. The health
+  # check connects over TCP on purpose: the image's entrypoint first
+  # runs a temporary server on the unix socket alone, which a socket
+  # ping would answer for before the real server exists.
+  test:
+    name: Test (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # No free threaded builds: the instrumentation is pure Python
+        # and a free threaded row would only test the drivers' own C
+        # extensions.
+        python-version:
+          - "3.12"
+          - "3.13"
+          - "3.14"
+          - "3.15"
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_DATABASE: wrapture
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pmysql"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 3306:3306
+    env:
+      WRAPTURE_MYSQL_URL: mysql://root:mysql@localhost:3306/wrapture
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run tests
+        run: uv run --no-default-groups --group test pytest
+
+  # Each target's suite against the other supported lines of its
+  # driver, overlaid on the project environment as the Justfile's
+  # per-target recipes do, on Python 3.12 (PyMySQL is pure Python, so
+  # any interpreter would do; 3.12 keeps the rows uniform). The lock's
+  # own version is covered by the test job above. Keep this list in
+  # step with the Justfile.
+  test-targets:
+    name: Test ${{ matrix.target }} ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: pymysql
+            suite: pymysql
+            overlay: "pymysql[rsa]"
+            version: "1.1.1"
+          - target: pymysql
+            suite: pymysql
+            overlay: "pymysql[rsa]"
+            version: "1.1.3"
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_DATABASE: wrapture
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pmysql"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 3306:3306
+    env:
+      WRAPTURE_MYSQL_URL: mysql://root:mysql@localhost:3306/wrapture
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup uv and Python 3.12
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run the ${{ matrix.target }} suite against ${{ matrix.target }} ${{ matrix.version }}
+        run: uv run --no-default-groups --group test --with "${{ matrix.overlay }}==${{ matrix.version }}" pytest tests/${{ matrix.suite }}
+
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check code with ruff
+        run: |
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+
+      - name: Type check with mypy
+        run: uv run mypy
+
+  build:
+    name: Build sdist and wheel
+    needs:
+      - test
+      - test-targets
+      - lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build source distribution and wheel
+        run: uv build
+
+      - name: List built artifacts
+        run: ls -las dist
+
+      - name: Store built artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/*
+
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Resolve version and prerelease status
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
+          BASE_VERSION="$(echo "$VERSION" | sed -E 's/\.?(dev|a|b|rc)[0-9]+$//')"
+          ANCHOR="version-$(echo "$BASE_VERSION" | tr -d '.')"
+          if [[ "$VERSION" != "$BASE_VERSION" ]]; then
+              PRERELEASE="true"
+          else
+              PRERELEASE="false"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "anchor=$ANCHOR" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Verify version matches tag
+        run: |
+          EXPECTED="${{ steps.meta.outputs.version }}"
+          ACTUAL="$(uv run --no-default-groups python -c 'import wrapture_instrumentation_mysql; print(wrapture_instrumentation_mysql.__version__)')"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "Tag version ($EXPECTED) does not match __version__ ($ACTUAL) in src/wrapture_instrumentation_mysql/__init__.py" >&2
+              exit 1
+          fi
+          echo "Version match: $ACTUAL"
+
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List collected artifacts
+        run: ls -las dist
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Write release notes body
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          BASE_VERSION="${{ steps.meta.outputs.base_version }}"
+          ANCHOR="${{ steps.meta.outputs.anchor }}"
+          DOCS_URL="https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGES.md#${ANCHOR}"
+          if [[ "${{ steps.meta.outputs.prerelease }}" == "true" ]]; then
+              cat > body.md <<BODY
+          Preview release. Release notes for the upcoming ${BASE_VERSION}
+          final (work in progress): ${DOCS_URL}
+
+          May be installable from PyPi:
+
+              pip install wrapture-instrumentation-mysql==${VERSION}
+
+          If \`pip\` reports the version is unavailable, this preview has
+          not been uploaded. The wheel and source distribution are
+          attached, together with \`SHA256SUMS\` for verification.
+          BODY
+          else
+              cat > body.md <<BODY
+          Full release notes: ${DOCS_URL}
+
+          Install from PyPi (recommended):
+
+              pip install wrapture-instrumentation-mysql==${VERSION}
+
+          PyPi uploads follow each GitHub release; if \`pip\` reports the
+          version is unavailable, the matching PyPi upload may not have
+          happened yet. The wheel and source distribution are attached,
+          together with \`SHA256SUMS\` for verification.
+          BODY
+          fi
+          cat body.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          FLAGS=()
+          if [[ "${{ steps.meta.outputs.prerelease }}" == "true" ]]; then
+              FLAGS+=("--prerelease")
+          fi
+          gh release create "${{ steps.meta.outputs.tag }}" \
+              --title "wrapture-instrumentation-mysql ${{ steps.meta.outputs.version }}" \
+              --notes-file body.md \
+              "${FLAGS[@]}" \
+              dist/*
+
+  publish:
+    name: Publish to PyPi
+    runs-on: ubuntu-latest
+    needs:
+      - release
+    if: startsWith(github.ref, 'refs/tags/')
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

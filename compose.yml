@@ -1,0 +1,63 @@
+# The MySQL server the tests need, and a container to run the tests
+# in, with the toolchain the mysqlclient driver needs to build from
+# source (the machine then needs no MySQL client at all).
+#
+#   just test-docker 3.15         one version, extra args to pytest
+#   just test-docker-all          every supported version
+#   just mysql-start              the server alone, published on
+#                                 localhost:33069 for the demos and
+#                                 for running the tests natively
+#
+# The tests container gets the server's URL in the environment, so the
+# suite's server fixture uses it and starts nothing itself, exactly as
+# on CI with its service container. uv's cache and the managed
+# interpreters live on one named volume and the per-version project
+# environments on another, so a rerun pays for neither the download
+# nor the install, and the container's environment never collides
+# with the .venv the host uses in the same directory.
+#
+# The health check connects over TCP (-h 127.0.0.1) on purpose: the
+# image's entrypoint first runs a temporary server on the unix socket
+# alone to initialise the data directory, and a socket ping would
+# answer for that one, several seconds before the real server exists.
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
+      MYSQL_DATABASE: wrapture
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pmysql"]
+      interval: 2s
+      timeout: 5s
+      retries: 45
+    ports:
+      - "127.0.0.1:${WRAPTURE_MYSQL_PORT:-33069}:3306"
+
+  tests:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      WRAPTURE_MYSQL_URL: mysql://root:mysql@mysql:3306/wrapture
+      UV_PYTHON: ${UV_PYTHON:-3.14}
+      UV_CACHE_DIR: /cache/uv
+      UV_PYTHON_INSTALL_DIR: /cache/python
+      UV_LINK_MODE: copy
+    volumes:
+      - .:/work
+      - uv-cache:/cache
+      - venvs:/venv
+    entrypoint:
+      - sh
+      - -c
+      - |
+        export UV_PROJECT_ENVIRONMENT="/venv/$$UV_PYTHON"
+        exec uv run --python "$$UV_PYTHON" --no-default-groups --group test pytest "$$@"
+      - tests
+
+volumes:
+  uv-cache:
+  venvs:
