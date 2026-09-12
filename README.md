@@ -11,8 +11,8 @@ class per client library, so tracing every query, connection and
 transaction your application sends to MySQL (or MariaDB, through the
 same drivers) is one config entry and no code.
 
-> **Status: alpha, ahead of 1.0.0.** Developed against wrapture's
-> alpha series, with pre-releases published to
+> **Status: beta, ahead of 1.0.0.** Developed against wrapture's
+> beta series, with pre-releases published to
 > [PyPI](https://pypi.org/project/wrapture-instrumentation-mysql/),
 > and until 1.0.0 is final a plain `pip install
 > wrapture-instrumentation-mysql` picks up the latest pre-release
